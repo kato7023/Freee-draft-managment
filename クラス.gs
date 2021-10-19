@@ -307,7 +307,7 @@ class Request {
    * freeeにPUTリクエストを送信する
    * @
    */
-  static requestPut() {
+  requestPut() {
     //TODO:
   }
 

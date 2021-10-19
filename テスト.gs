@@ -6,12 +6,12 @@ function myFunction2() {
   const ss = new ReadSpreadsheet();
   // // ss.saveToSS(b.vals_recievable,'recievable');
   // ss.renewAllDatas(452906, 'tags');
-  console.log(F.partner(2818760,ss));
-  console.log(F.company('三国産業株式会社',ss));
-  console.log(F.accItem('受取債権',ss));
-  console.log(F.item(154437844,ss));
-  console.log(F.section(112401,ss));
-  console.log(F.tag('3308新東名厚木南IC',ss));
+  console.log(F.partner(2818760, ss));
+  console.log(F.company('三国産業株式会社', ss));
+  console.log(F.accItem('受取債権', ss));
+  console.log(F.item(154437844, ss));
+  console.log(F.section(112401, ss));
+  console.log(F.tag('3308新東名厚木南IC', ss));
 }
 
 function myFunction3() {
@@ -35,9 +35,9 @@ function myFunction5() {
   const ss = new ReadSpreadsheet();
   const req = new Request('deals');
   req.addParam('company_id', F.company('三国産業株式会社', ss))
-     .addParam('account_item_id', F.accItem('受取手形', ss))
-     .addParam('start_issue_date', F.date(new Date('2020/1/1')))
-     .addParam('end_issue_date', F.date(new Date('2020/1/31')));
+    .addParam('account_item_id', F.accItem('受取手形', ss))
+    .addParam('start_issue_date', F.date(new Date('2020/1/1')))
+    .addParam('end_issue_date', F.date(new Date('2020/1/31')));
   console.log(req.url);
 
   req.changeParam('what_the_fuck', F.accItem('受取債権', ss));
@@ -73,7 +73,7 @@ function myFunction6() {
   if (test.length != 1) {
     for (const [detail, i] of test) {
       const judge = detail.account_item_id == F.accItem('受取手形') ||
-                    detail.account_item_id == F.accItem('受取債権');
+        detail.account_item_id == F.accItem('受取債権');
       if (!judge) test.splice(i, 1);
     }
     if (test.length != 1) throw '取引の明細行に手形明細が2つ以上登録されています。';
@@ -119,3 +119,25 @@ function urltest() {
   console.log(url.page);
 }
 
+for (const accitem of conf.acc_items_renew) {
+  //＋更新の勘定科目で絞り込む
+  const filtered = deals.filter(deal => {
+    if (!deal.renews) {
+      return false; //＋更新を含まない取引を除外する
+    } else {
+      deal.target_num = 0; //対象行が含まれる数を格納するプロパティを追加
+      return deal.renews.some(renew => //renews配列の各要素に対して
+        renew.details.some(detail => {  //その中のdetails配列の各要素（＝＋更新の各行に相当）
+          //＋更新の勘定科目がconf.acc_items_renewsを含むか判定
+          if (detail.account_item_id == F.accItem(accitem, ss)) {
+            deal.target_num = deal.target_num + 1;
+            hit++;
+            detail.target = true; //対象行のマーキング
+            return true;
+          }
+        })
+      );
+    }
+  });
+  filteredDeals.push(...filtered);
+}
