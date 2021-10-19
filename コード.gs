@@ -5,11 +5,11 @@ function myFunction() {
   // 条件設定：事業所／取得範囲／・・・→　freeeから取引取得　SSにsetValues
 }
 
-function getRecievables() {
+function getRecievable() {
   getDrafts_('recievable', new ReadSpreadsheet());
 }
 
-function getPayables() {
+function getPayable() {
   getDrafts_('payable', new ReadSpreadsheet());
 }
 
@@ -29,56 +29,90 @@ function getAllDrafts() {
   getDrafts_('discounted', ss);
 }
 
+function renewPartners() {
+  const company = getConfigs_().recievable.company;
+  renewData(company,'partners');
+}
+
+function renewAccountItems() {
+  const company = getConfigs_().recievable.company;
+  renewData(company,'account_items');
+}
+
+function renewItems() {
+  const company = getConfigs_().recievable.company;
+  renewData(company,'items');
+}
+
+function renewSections() {
+  const company = getConfigs_().recievable.company;
+  renewData(company,'sections');
+}
+
+function renewTags() {
+  const company = getConfigs_().recievable.company;
+  renewData(company,'tags');
+}
+
 /**
  * 各手形の条件設定を行い、configsオブジェクトを返す
- * @param {ReadSpreadsheet} ss
+ * @param {ReadSpreadsheet} ss ss渡さないと、flag_tag_idは使えない
  * @return {Object} configs 設定オブジェクト
  */
 function getConfigs_(ss) {
 
   //settingオブジェクトを定義
   //TODO:↓設定シートなどで共通設定は選択できるよにするか
-  const company = '三国産業株式会社';
-  const flag_tag = '手形債権台帳';
+  const company = F.company('三国産業株式会社');
+  let flag_tag = '';
+    if(ss) flag_tag = F.tag('手形債権台帳', ss);
   const start_issue_date = new Date('2015/1/1');
   const end_issue_date = new Date('2023/1/1');
 
   const configs = {
     recievable: {
-      flag_tag_id: F.tag(flag_tag, ss),
+      flag_tag_id: flag_tag,
       company: company,
       acc_items_detail: ['売上高', '売上高（営業）'],
       acc_items_renew: ['受取手形', '受取債権'],
       start_issue_date: start_issue_date,
       end_issue_date: end_issue_date,
-      type: 'income'
+      type: 'income',
+      sort_by: '期日',
+      sort_type: '日付降順',
     },
     payable: {
-      flag_tag_id: F.tag(flag_tag, ss),
+      flag_tag_id: flag_tag,
       company: company,
       acc_items_detail: ['仕入高', '仕入高（営業）', '車両運搬具', '機械装置'],
       acc_items_renew: ['支払手形', '設備支払手形'],
       start_issue_date: start_issue_date,
       end_issue_date: end_issue_date,
-      type: 'expense'
+      type: 'expense',
+      sort_by: '期日',
+      sort_type: '日付降順',
     },
     endorsed: {
-      flag_tag_id: F.tag(flag_tag, ss),
+      flag_tag_id: flag_tag,
       company: company,
       acc_items_detail: ['仕入高', '仕入高（営業）'],
       acc_items_renew: ['裏書手形'],
       start_issue_date: start_issue_date,
       end_issue_date: end_issue_date,
-      type: 'expense'
+      type: 'expense',
+      sort_by: 'ID',
+      sort_type: '数値降順',
     },
     discounted: {
-      flag_tag_id: F.tag(flag_tag, ss),
+      flag_tag_id: flag_tag,
       company: company,
       acc_items_detail: ['割引手形'],
       acc_items_renew: [],
       start_issue_date: start_issue_date,
       end_issue_date: end_issue_date,
-      type: 'income'
+      type: 'income',
+      sort_by: 'ID',
+      sort_type: '数値降順',
     }
   }
 
@@ -111,6 +145,7 @@ function getDrafts_(type, ss) {
 
 
   //TODO:valuesのソートを実施
+  sortValues_(values, type, ss, conf.sort_by, conf.sort_type);
 
   //最終スプレッドシートに書き込み
   //NOTE:後でss.saveToSSメソッドに切り替える
@@ -133,7 +168,7 @@ function getDeals_(conf, ss) {
     const req = new Request('deals');
 
     req  //URL作成
-      .addParam('company_id', F.company(conf.company, ss))
+      .addParam('company_id', conf.company)
       .addParam('account_item_id', F.accItem(accitem, ss))
       .addParam('start_issue_date', F.date(conf.start_issue_date))
       .addParam('end_issue_date', F.date(conf.end_issue_date));
@@ -306,6 +341,64 @@ function makeValues_(filteredDeals, type, conf, ss) {
   return values;
 }
 
+
+/**
+ * Valuesデータを渡すと、条件に従ってソートして返す　※リターンなしの破壊メソッド
+ * @param {Array} values ２次元配列
+ * @param {string} type
+ * @param {ReadSpreadsheet} ss
+ * @param {string} sortBy　どの列でソートするか。手形一覧表の２列目日本語の文字列で指定
+ * @param {string} sortType　'日付','数値','文字列',’昇順’,'降順'の組み合わせ(default:'日付降順') 
+ */
+function sortValues_(values, type, ss, sortBy, sortType='日付降順') {
+
+  const props = ss['vals_'+type][1];
+  const index = props.indexOf(sortBy);
+  if(index == -1) throw 'sortByの指定が不正です。';
+  
+  //sortTypeの指定
+  let descending = true;
+  let string     = false;
+  if(sortType.match(/昇順/)) descending = false;
+  if(sortType.match(/文字列/)) string = true;
+
+  if(descending && !string ) {
+    console.log('valuesを数値日付・降順でソートします。');
+    values.sort((a,b) => {
+      //日付が空の場合の処理
+      let a_ = a[index];
+      let b_ = b[index];
+      if(!a_) a_ = new Date('2000/1/1');
+      if(!b_) b_ = new Date('2000/1/1');
+      return b_-a_;
+    });
+  }
+  if(!descending && !string) {
+    console.log('valuesを数値日付・昇順でソートします。');
+    values.sort((a,b) => {
+      let a_ = a[index];
+      let b_ = b[index];
+      if(!a_) a_ = new Date('2000/1/1');
+      if(!b_) b_ = new Date('2000/1/1');
+      return a_-b_;
+    });
+  }
+  if(descending && string ) {
+    console.log('valuesを文字列・降順でソートします。');    
+    values.sort((a,b) => {
+      if(b[index] > a[index]) return 1;
+      else return -1;
+    });
+  } 
+  if(!descending && string ) {
+    console.log('valuesを文字列・昇順でソートします。');     
+    values.sort((a,b) => {
+      if(a[index] > b[index]) return 1;
+      else return -1;
+    });
+  }   
+}
+
 /**
  * FilteredDealsデータを渡すと、必要要素を抜き出してオブジェクトに格納して返す
  * @param {Object} deal - getFilteredResponse_のresponses配列の各要素（１つの取引に相当）
@@ -410,4 +503,40 @@ function extractDealProperties_(deal, conf, ss) {
   }
 
   return rArr;
+}
+
+/**
+ * renewAllDatasメソッド　データシートの情報を更新する
+ * @param {number} company_id 事業所番号
+ * @param {string} type 取引先：'partners' 勘定科目：'account_items' 品目：'items' 部門：'sections' メモタグ：'tags'
+ */
+function renewData(company_id, type) {
+
+  //スプレッドシート読み込み
+  const ss = new ReadSpreadsheet();
+
+  //リクエストクラス取得
+  const req = new Request(type);
+  req.addParam('company_id', company_id);
+
+  //typeを大文字やS無しにする処理
+  const firstLtr = type.slice(0, 1);
+  const typeCap = firstLtr.toUpperCase() + type.replace(firstLtr, '');
+  const typeNoS = type.slice(0, -1);
+
+  //リクエストを実施
+  const datas = req.pageRequest(type);
+
+  //データを整形（３列データ　[id, name, obj]）
+  const values = datas.map(obj => {
+    return [obj.id, obj.name, obj];
+  })
+
+  //データ穴埋め
+  for (let i = 0; i < F['dataMax' + typeCap]; i++) {
+    if (!values[i]) values.push(['', '', '']);
+  }
+
+  //スプレッドシートに書き込み
+  ss[typeNoS + 'RNG'].setValues(values);
 }

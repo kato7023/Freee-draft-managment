@@ -424,45 +424,8 @@ class ReadSpreadsheet {
       throw 'valuesの行数、列数が不正です。';
     }
   }
-
-  /**
-   * renewAllDatasメソッド　データシートの情報を更新する
-   * @param {number} company_id 事業所番号
-   * @param {string} type 取引先：'partners' 品目：'items' 部門：'sections' メモタグ：'tags'
-   */
-  renewAllDatas(company_id, type) {  
-  
-    //リクエストクラス取得
-    const req = new Request(type);
-    req.addParam('company_id',company_id);
-
-    //typeを大文字やS無しにする処理
-    const firstLtr = type.slice(0,1);
-    const typeCap = firstLtr.toUpperCase() + type.replace(firstLtr,'');
-    const typeNoS = type.slice(0,-1);
-
-    //リクエストを実施
-    const datas = req.pageRequest(type);
-
-    //データを整形（３列データ　[id, name, obj]）
-    const values = datas.map(obj => {
-      return [obj.id,obj.name,obj];
-    })
-
-    //データ穴埋め
-    for(let i=0;i<F['dataMax'+typeCap];i++) {
-      if(!values[i]) values.push(['','','']);
-    }
-
-    //スプレッドシートに書き込み
-    this[typeNoS+'RNG'].setValues(values);    
-  }
   
 }
-
-
-
-
 
 
 /**
@@ -508,4 +471,46 @@ function revertId(id, prefix = "", surfix = "") {
     count += (id.charCodeAt(i) - 65) * 26 ** (len - i - 1);
   }
   return count + 1;
+}
+
+// function onOpen() {
+
+//   //メニュー配列
+//   const myMenu = [
+//     { name: "受取手形をfreeeから取得", functionName: "getRecievable" },
+//     { name: "支払手形をfreeeから取得", functionName: "getPayable" },
+//     { name: "割引手形をfreeeから取得", functionName: "getDiscounted" },
+//     { name: "裏書手形をfreeeから取得", functionName: "getEndorsed" },
+//     { name: "全部手形をfreeeから取得", functionName: "getAllDrafts" },
+// //    { name: "", functionName: "" },
+//     { name: "取引先リストを更新", functionName: "renewPartners" },
+//     { name: "勘定科目リストを更新", functionName: "renewAccountItems" },
+//     { name: "品目リストを更新", functionName: "renewItems" },
+//     { name: "部門リストを更新", functionName: "renewSections" },
+//     { name: "メモタグリストを更新", functionName: "renewTags" },
+//   ];
+
+//   SpreadsheetApp.getActiveSpreadsheet().addMenu("手形管理", myMenu); //メニューを追加
+
+// }
+
+function onOpen() {
+  const ui = SpreadsheetApp.getUi()
+  
+  //メニュー名を決定
+  const menu = ui.createMenu("手形管理");
+  
+  //メニューに実行ボタン名と関数を割り当て:
+  menu.addItem('受取手形をfreeeから取得', 'getRecievable');
+  menu.addItem('支払手形をfreeeから取得', 'getPayable');
+  menu.addItem('割引手形をfreeeから取得', 'getDiscounted');
+  menu.addItem('裏書手形をfreeeから取得', 'getEndorsed');
+  menu.addItem('取引先リストを更新', 'renewPartners');
+  menu.addItem('勘定科目リストを更新', 'renewAccountItems');
+  menu.addItem('品目リストを更新', 'renewItems');
+  menu.addItem('部門リストを更新', 'renewSections');
+  menu.addItem('メモタグリストを更新', 'renewTags');
+  
+  //スプレッドシートに反映
+  menu.addToUi();
 }
