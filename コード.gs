@@ -106,40 +106,9 @@ function getDrafts_(type, ss) {
   //dealsをフィルターする
   const filteredDeals = filterDeals_(deals, type, conf, ss);
 
-  //responsesを処理して2次元配列valuesに格納
-  const values = [];
+  //filteredDealsを処理して2次元配列valuesに格納
+  const values = makeValues_(filteredDeals, type, conf, ss);
 
-  for (const deal of filteredDeals) {
-
-    //dealごとに、必要なプロパティーを取得
-    //r.dls : company_id, due_amount, issue_date, due_date, partner_id, status
-    //r.dts : id, account_item_id, accitem_name, tag_ids, tag_names, amount, description
-    //r.rns : update_date, update_Date, id, account_item_id, accitem_name, tag_ids, tag_names, amount, description
-    const rArr = extractDealProperties_(deal, conf, ss);
-
-    //NEXTFIX:rの形式を治す必要あり！！
-    for (const r of rArr) {
-      //typeごとに処理を分岐して、valuesを整形していく
-      switch (type) {
-        case 'recievable':
-          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.dls.due_Date, r.rns.description]);
-          break;
-        case 'payable':
-          if (r.rns.description.match(/三菱/)) r.rns.bankaccount = '三菱当座9000298';
-          else if (r.rns.description.match(/三井/)) r.rns.bankaccount = '三井当座2029065';
-          else r.bankaccount = '？？？';
-          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.rns.bankaccount, r.dls.due_Date, r.rns.description]);
-          break;
-        case 'endorsed':
-          values.push([r.rns.id, r.rns.tag_names, '元取引先 ', '元金額', '受領日', '期日', r.dls.partner_name, r.rns.amount, r.rns.description]);
-          break;
-        case 'discounted':
-          values.push([r.dts.id, r.dts.tag_names, '元手形取引先', r.dts.amount, '口座', '予定日', '手数料', '利息']);
-          break;
-        default: throw 'something has gone wrong';
-      }
-    }
-  }
 
   //TODO:valuesのソートを実施
 
@@ -195,7 +164,7 @@ function filterDeals_(deals, type, conf, ss) {
 
   //フィルター結果格納用の配列を用意
   let filteredDeals = [];
-  
+
   switch (type) {
     case 'recievable':
     case 'payable':
@@ -288,9 +257,58 @@ function filterDeals_(deals, type, conf, ss) {
   return filteredDeals;
 }
 
+
+/**
+ * FilteredDealsデータを渡すと、typeごとに整理して、２次元配列valuesに格納して返す
+ * @param {Array} filteredDeals - filteredDeals（取引の配列）
+ * @param {string} type
+ * @param {Object} conf
+ * @param {ReadSpreadsheet} ss 
+ * @return {Array} values
+ */
+function makeValues_(filteredDeals, type, conf, ss) {
+
+  const values = [];
+
+  for (const deal of filteredDeals) {
+
+    //dealごとに、必要なプロパティーを取得
+    //r.dls : company_id, due_amount, issue_date, due_date, partner_id, status
+    //r.dts : id, account_item_id, accitem_name, tag_ids, tag_names, amount, description
+    //r.rns : update_date, update_Date, id, account_item_id, accitem_name, tag_ids, tag_names, amount, description
+
+    const rArr = extractDealProperties_(deal, conf, ss);
+
+    //FIX:rの形式を治す必要あり！！
+    for (const r of rArr) {
+      //typeごとに処理を分岐して、valuesを整形していく
+      switch (type) {
+        case 'recievable':
+          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.dls.due_Date, r.rns.description]);
+          break;
+        case 'payable':
+          const dsrpt = r.rns.description;
+          if (dsrpt && dsrpt.match(/三菱/)) r.rns.bankaccount = '三菱当座9000298';
+          else if (dsrpt && dsrpt.match(/三井/)) r.rns.bankaccount = '三井当座2029065';
+          else r.rns.bankaccount = '？？？';
+          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.rns.bankaccount, r.dls.due_Date, r.rns.description]);
+          break;
+        case 'endorsed':
+          values.push([r.rns.id, r.rns.tag_names, '元取引先 ', '元金額', '受領日', '期日', r.dls.partner_name, r.rns.amount, r.rns.description]);
+          break;
+        case 'discounted':
+          values.push([r.dts.id, r.dts.tag_names, '元手形取引先', r.dts.amount, '口座', '予定日', '手数料', '利息']);
+          break;
+        default: throw 'something has gone wrong';
+      }
+    }
+  }
+  return values;
+}
+
 /**
  * FilteredDealsデータを渡すと、必要要素を抜き出してオブジェクトに格納して返す
- * @prama {Object} deal - getFilteredResponse_のresponses配列の各要素（１つの取引に相当）
+ * @param {Object} deal - getFilteredResponse_のresponses配列の各要素（１つの取引に相当）
  * @param {Object} conf
  * @param {ReadSpreadsheet} ss 
  * @return {Arr} rArr
@@ -328,15 +346,20 @@ function extractDealProperties_(deal, conf, ss) {
       const dts = { id, account_item_id, tag_ids, amount, description };
       dts.accitem_name = F.accItem(dts.account_item_id, ss);
       Object.assign(r.dts, dts);
+
+      //処理が終わったら、マーキングをOFFして一度forを抜ける
       detail.target = false; //対象detailのマーキングをオフ
+      break;
     }
 
     //renewのパートの処理
     if (deal.renews) { //renews自体存在しなければスキップ
+
       for (const renew of deal.renews) {
 
         //renewsレベル（renewの一番上）の処理
         if (renew.renew_target_type != 'accrual') continue;
+        let inProgress = true;
 
         for (const renewDetail of renew.details) {
 
@@ -348,8 +371,13 @@ function extractDealProperties_(deal, conf, ss) {
           rns.accitem_name = F.accItem(rns.account_item_id, ss);
           Object.assign(r.rns, rns);
 
+          //処理が終わったら、マーキングをOFFして一度forを抜ける
           renewDetail.target = false; //対象detailのマーキングをオフ
+          inProgress = false;
+          break;
         }
+        //renewDetailの処理が完了していたらfor抜ける
+        if (!inProgress) break;
       }
     }
 
@@ -382,4 +410,4 @@ function extractDealProperties_(deal, conf, ss) {
   }
 
   return rArr;
-}  
+}
