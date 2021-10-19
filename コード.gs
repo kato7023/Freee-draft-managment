@@ -122,19 +122,19 @@ function getDrafts_(type, ss) {
       //typeごとに処理を分岐して、valuesを整形していく
       switch (type) {
         case 'recievable':
-          values.push([r.id, r.issue_Date, r.partner_name, r.tag_names, r.amount, r.due_Date, r.description]);
+          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.dls.due_Date, r.rns.description]);
           break;
         case 'payable':
-          if (r.description.match(/三菱/)) r.bankaccount = '三菱当座9000298';
-          else if (r.description.match(/三井/)) r.bankaccount = '三井当座2029065';
+          if (r.rns.description.match(/三菱/)) r.rns.bankaccount = '三菱当座9000298';
+          else if (r.rns.description.match(/三井/)) r.rns.bankaccount = '三井当座2029065';
           else r.bankaccount = '？？？';
-          values.push([r.id, r.issue_Date, r.partner_name, r.tag_names, r.amount, r.bankaccount, r.due_Date, r.description]);
+          values.push([r.rns.id, r.dls.issue_Date, r.dls.partner_name, r.rns.tag_names, r.rns.amount, r.rns.bankaccount, r.dls.due_Date, r.rns.description]);
           break;
         case 'endorsed':
-          values.push([r.id, r.tag_names, '元取引先 ', '元金額', '受領日', '期日', r.partner_name, r.amount, r.description]);
+          values.push([r.rns.id, r.rns.tag_names, '元取引先 ', '元金額', '受領日', '期日', r.dls.partner_name, r.rns.amount, r.rns.description]);
           break;
         case 'discounted':
-          values.push([r.id, r.tag_names, '元手形取引先', r.amount, '口座', '予定日', '手数料', '利息']);
+          values.push([r.dts.id, r.dts.tag_names, '元手形取引先', r.dts.amount, '口座', '予定日', '手数料', '利息']);
           break;
         default: throw 'something has gone wrong';
       }
@@ -188,46 +188,100 @@ function getDeals_(conf, ss) {
  * @return {Array} filteredDeals
  */
 function filterDeals_(deals, type, conf, ss) {
-
   //各種絞り込み、typeで処理分岐
+
+  //ヒットした回数を記録する
+  let detail_num = 0;
+
+  //フィルター結果格納用の配列を用意
   let filteredDeals = [];
+  
   switch (type) {
     case 'recievable':
     case 'payable':
     case 'endorsed':
+
+      //判定用の勘定科目配列
+      const target_acc_items = [];
       for (const accitem of conf.acc_items_renew) {
-        //＋更新の勘定科目で絞り込む
-        const filtered = deals.filter(deal => {
-          deal.target_num = 0; //対象行が含まれる数を格納するプロパティを追加
-          if (!deal.renews) {
-            return false; //＋更新を含まない取引を除外する
-          } else {
-            return deal.renews.some(renew => //renews配列の各要素に対して
-              renew.details.some(detail => {  //その中のdetails配列の各要素（＝＋更新の各行に相当）
-                //＋更新の勘定科目がconf.acc_items_renewsを含むか判定
-                if (detail.account_item_id == F.accItem(accitem, ss)) {
-                  deal.target_num++;
-                  detail.target = true; //対象行のマーキング
-                  return true;
-                }
-              })
-            );
-          }
-        });
-        filteredDeals.push(...filtered);
+        target_acc_items.push(F.accItem(accitem, ss));
       }
+
+      //３段ループで全取引の＋更新明細行を調べつつ、※対象のマーキングを行う※
+      for (const deal of deals) {  //各取引を走査
+        if (!deal.renews) continue;  //＋更新を含まない取引を除外する
+        deal.hasTarget = false;
+        deal.target_num = 0;
+        for (const renew of deal.renews) {  //各＋更新を走査
+          for (const detail of renew.details) {  //＋更新の各明細行を走査
+            //明細行の勘定科目は、対象勘定科目と一致するか？
+            if (target_acc_items.includes(detail.account_item_id)) {
+              deal.hasTarget = true;
+              deal.target_num++;
+              detail_num++;
+              detail.target = true;  //マーキング
+            }
+          }
+        }
+        if (deal.hasTarget) filteredDeals.push(deal);
+      }
+      console.log(`filterDeals_/${type}${conf.acc_items_renew}の結果、${filteredDeals.length}件の取引、${detail_num}件の明細行が抽出されました。`);
+      //       for (const accitem of conf.acc_items_renew) {
+      //         //＋更新の勘定科目で絞り込む
+      //         const filtered = deals.filter(deal => {
+      //           if (!deal.renews) {
+      //             return false; //＋更新を含まない取引を除外する
+      //           } else {
+      //             deal.target_num = 0; //対象行が含まれる数を格納するプロパティを追加
+      //             return deal.renews.some(renew => //renews配列の各要素に対して
+      //               renew.details.some(detail => {  //その中のdetails配列の各要素（＝＋更新の各行に相当）
+      //                 //＋更新の勘定科目がconf.acc_items_renewsを含むか判定
+      //                 if (detail.account_item_id == F.accItem(accitem, ss)) {
+      //                   deal.target_num = deal.target_num + 1;
+      //                   hit++;
+      //                   detail.target = true; //対象行のマーキング
+      // console.log(deal.target_num);
+      //                   return true;
+      //                 }
+      //               })
+      //             );
+      //           }
+      //         });
+      // console.log(`filterDeals_/${accitem}の結果、${filtered.length}件の取引、${hit}件の明細行が抽出されました。`);
+      //         filteredDeals.push(...filtered);
+      //       }
       break;
     case 'discounted':
-      filteredDeals = deals.filter(deal => {
-        deal.target_num = 0; //対象行が含まれる数を格納するプロパティを追加
-        deal.details.some(detail => { //メモタグ手形債権台帳を含まないで絞り込み
+
+      //２段ループで全取引の明細行を調べつつ、※対象のマーキングを行う※
+      for (const deal of deals) {  //各取引を走査
+        deal.hasTarget = false;
+        deal.target_num = 0;
+        for (const detail of deal.details) {  //各明細行を走査
+          //メモタグ手形債権台帳を含まないか
           if (!detail.tag_ids.includes(conf.flag_tag_id)) {
+            deal.hasTarget = true;
             deal.target_num++;
-            detail.target = true; //対象行のマーキング
-            return true;
+            detail_num++;
+            detail.target = true;  //マーキング
           }
-        })
-      });
+        }
+        if (deal.hasTarget) filteredDeals.push(deal);
+      }
+      console.log(`filterDeals_/${type}の結果、${filteredDeals.length}件の取引、${detail_num}件の明細行が抽出されました。`);
+
+
+
+      // filteredDeals = deals.filter(deal => {
+      //   deal.target_num = 0; //対象行が含まれる数を格納するプロパティを追加
+      //   deal.details.some(detail => { //メモタグ手形債権台帳を含まないで絞り込み
+      //     if (!detail.tag_ids.includes(conf.flag_tag_id)) {
+      //       deal.target_num++;
+      //       detail.target = true; //対象行のマーキング
+      //       return true;
+      //     }
+      //   })
+      // });
       break;
     default: throw 'something has gone wrong';
   }
@@ -235,7 +289,7 @@ function filterDeals_(deals, type, conf, ss) {
 }
 
 /**
- * freeeのdealデータを渡すと、必要要素を抜き出してオブジェクトに格納して返す
+ * FilteredDealsデータを渡すと、必要要素を抜き出してオブジェクトに格納して返す
  * @prama {Object} deal - getFilteredResponse_のresponses配列の各要素（１つの取引に相当）
  * @param {Object} conf
  * @param {ReadSpreadsheet} ss 
