@@ -3,7 +3,12 @@ function myFunction() {
   // とりあえず複数事業所対応をどうするか？
   // 最初に条件設定をするしか無いか？
   // 条件設定：事業所／取得範囲／・・・→　freeeから取引取得　SSにsetValues
+
+  const req = new Request();
+  console.log(req.token);
 }
+
+
 
 function getRecievable() {
   getDrafts_('recievable', new ReadSpreadsheet());
